@@ -280,7 +280,62 @@ struct EditorView: View {
         // Chinese input is a keyword match against the formula name.
         return store.formulas.filter { $0.name.localizedCaseInsensitiveContains(key) }
     }
-    var body: some View { let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0); return Form { Section("患者信息"){HStack{TextField("姓名",text:$draft.name);TextField("性别",text:$draft.gender);TextField("年龄",text:$draft.age)};TextField("电话",text:$draft.phone);HStack{Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate);Text("科别：\(draft.department)")}};Section("病历"){TextField("诊断",text:$draft.diagnosis);HStack{Text("症状/主诉").appFont(13, weight:.semibold);Spacer();Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary)};ZStack(alignment:.bottomTrailing){TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260 : 58, maxHeight:symptomsExpanded ? 360 : 76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)));Button(symptomsExpanded ? "收起" : "展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)}};Section("快速选方"){TextField("搜索方名 / 拼音",text:$formulaSearch);ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}};HStack{TextField("处方名称（保存时填写）",text:$formulaName);Button("保存处方") { let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines); if n.isEmpty { saveFormulaMessage="请先填写处方名称" } else { store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID); saveFormulaMessage=store.status }; showFormulaMessage=true }.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID == nil)};TextEditor(text:$draft.prescription).frame(minHeight:170);TextField("剂数",text:$draft.doses);Text(store.status).appFont(11).foregroundStyle(.secondary)};Section { if pricingExpanded { if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。" ).foregroundStyle(.secondary) } else { let typeCount = Set(pricing.0.map { "\($0.name)|\($0.unit)" }).count; Text("识别到 \(typeCount) 种药物").appFont(11).foregroundStyle(.secondary); ForEach(pricing.0) { line in HStack { Text(line.name); Spacer(); if line.price > 0 { Text(String(format: "%.2f %@ × %.3f元 = %.2f元", line.dose, line.unit, line.price, line.amount)) } } }; HStack { Spacer(); Text("合计（\(draft.doses.isEmpty ? "1" : draft.doses)剂）").bold(); Text(String(format: "¥%.2f", pricing.1)).bold().foregroundStyle(.blue) } }} } header: { HStack { Text("处方划价"); Spacer(); Button(pricingExpanded ? "收起" : "划价") { pricingExpanded.toggle() }.buttonStyle(.borderedProminent) } };Section("病历图片"){ImageGallery(files:draft.imageFiles, editable:true, onAdd:{draft.imageFiles.append(contentsOf: chooseImages())}, onDelete:{name in draft.imageFiles.removeAll{$0 == name}})};HStack{Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary)}}.formStyle(.grouped).padding().navigationTitle("门诊电子处方 · 病历编辑").alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}.alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}}
+    var body: some View {
+        let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                GroupBox("患者信息") {
+                    VStack(spacing: 10) {
+                        HStack { TextField("姓名", text:$draft.name); TextField("性别", text:$draft.gender); TextField("年龄", text:$draft.age) }
+                        TextField("电话", text:$draft.phone)
+                        HStack { Text("就诊日期"); Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate); Text("科别：\(draft.department)"); Spacer() }
+                    }.padding(6)
+                }
+                GroupBox("病历") {
+                    VStack(alignment:.leading, spacing:10) {
+                        TextField("诊断", text:$draft.diagnosis)
+                        HStack { Text("症状/主诉").appFont(13, weight:.semibold); Spacer(); Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary) }
+                        ZStack(alignment:.bottomTrailing) {
+                            TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260 : 58, maxHeight:symptomsExpanded ? 360 : 76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
+                            Button(symptomsExpanded ? "收起" : "展开") { withAnimation(.easeInOut){ symptomsExpanded.toggle() } }.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)
+                        }
+                    }.padding(6)
+                }
+                GroupBox("快速选方") {
+                    VStack(alignment:.leading, spacing:10) {
+                        TextField("搜索方名 / 拼音", text:$formulaSearch)
+                        ScrollView(.horizontal) { HStack { ForEach(filteredFormulas.prefix(12)) { f in Button(f.name) { selectedFormulaID=f.id; formulaName=f.name; draft.prescription=f.content } } } }
+                        HStack {
+                            TextField("处方名称（保存时填写）", text:$formulaName)
+                            Button("保存处方") { let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines); if n.isEmpty { saveFormulaMessage="请先填写处方名称" } else { store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID); saveFormulaMessage=store.status }; showFormulaMessage=true }.buttonStyle(.borderedProminent)
+                            Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID == nil)
+                        }
+                        TextEditor(text:$draft.prescription).frame(minHeight:170).padding(4).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
+                        TextField("剂数",text:$draft.doses)
+                        Text(store.status).appFont(11).foregroundStyle(.secondary)
+                    }.padding(6)
+                }
+                GroupBox {
+                    if pricingExpanded {
+                        VStack(alignment:.leading, spacing:8) {
+                            if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。").foregroundStyle(.secondary) }
+                            else {
+                                let typeCount = Set(pricing.0.map { "\($0.name)|\($0.unit)" }).count
+                                Text("识别到 \(typeCount) 种药物").appFont(11).foregroundStyle(.secondary)
+                                ForEach(pricing.0) { line in HStack { Text(line.name); Spacer(); if line.price > 0 { Text(String(format: "%.2f %@ × %.3f元 = %.2f元", line.dose, line.unit, line.price, line.amount)) } } }
+                                HStack { Spacer(); Text("合计（\(draft.doses.isEmpty ? "1" : draft.doses)剂）").bold(); Text(String(format:"¥%.2f",pricing.1)).bold().foregroundStyle(.blue) }
+                            }
+                        }.padding(6)
+                    }
+                } label: { HStack { Text("处方划价"); Spacer(); Button(pricingExpanded ? "收起" : "划价") { pricingExpanded.toggle() }.buttonStyle(.borderedProminent) } }
+                GroupBox("病历图片") { ImageGallery(files:draft.imageFiles, editable:true, onAdd:{draft.imageFiles.append(contentsOf:chooseImages())}, onDelete:{name in draft.imageFiles.removeAll{$0==name}}).padding(6) }
+                HStack { Button("保存修改"){store.save(draft)}.keyboardShortcut("s"); Button("恢复原内容"){draft=record}; Text("处方类别：\(draft.category)").foregroundStyle(.secondary); Spacer() }
+            }.frame(maxWidth:.infinity, alignment:.leading).padding(20)
+        }
+        .navigationTitle("门诊电子处方 · 病历编辑")
+        .alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}
+        .alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}
+    }
 }
 
 @MainActor private func chooseImages() -> [String] {
