@@ -268,11 +268,12 @@ private struct EditorSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).appFont(13, weight: .semibold)
+            Text(title).appFont(14, weight: .semibold)
             VStack(alignment: .leading, spacing: 10) { content() }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.055)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.12), lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -282,7 +283,7 @@ struct EditorView: View {
     let record: VisitRecord; @ObservedObject var store: ClinicStore; @State private var formulaSearch=""; @State private var formulaName=""; @State private var selectedFormulaID:String?; @State private var confirmDeleteFormula=false; @State private var saveFormulaMessage=""; @State private var showFormulaMessage=false; @State private var draft:VisitRecord; @State private var symptomsExpanded = false; @State private var pricingExpanded = false
     init(record:VisitRecord,store:ClinicStore){self.record=record;self.store=store;_draft=State(initialValue:record)}
     private func infoField(_ title: String, text: Binding<String>, width: CGFloat) -> some View {
-        HStack(spacing: 8) { Text(title).fixedSize(); TextField("", text: text).textFieldStyle(.plain).frame(width: width, alignment: .leading) }
+        HStack(spacing: 8) { Text(title + "：").fixedSize(); TextField("", text: text).textFieldStyle(.plain).frame(width: width, alignment: .leading) }
     }
     var filteredFormulas: [Formula] {
         let key = formulaSearch.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -311,14 +312,14 @@ struct EditorView: View {
                         Spacer(minLength:0)
                     }
                     Divider()
-                    HStack(spacing:8) { Text("电话").fixedSize(); TextField("",text:$draft.phone).textFieldStyle(.plain).frame(width:260,alignment:.leading); Spacer() }
+                    HStack(spacing:8) { Text("电话：").fixedSize(); TextField("",text:$draft.phone).textFieldStyle(.plain).frame(width:260,alignment:.leading); Spacer() }
                     Divider()
-                    HStack(spacing:24) { HStack(spacing:8){Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate)}; HStack(spacing:8){Text("科别：");Text(draft.department)}; Spacer() }
+                    HStack(spacing:24) { HStack(spacing:8){Text("就诊日期：");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate)}; HStack(spacing:8){Text("科别：");Text(draft.department)}; Spacer() }
                 }
                 EditorSection(title: "病历") {
-                    HStack(spacing:8) { Text("诊断").fixedSize(); TextField("",text:$draft.diagnosis).textFieldStyle(.plain); }
+                    HStack(spacing:8) { Text("诊断：").fixedSize(); TextField("",text:$draft.diagnosis).textFieldStyle(.plain); }
                     Divider()
-                    HStack { Text("症状/主诉").appFont(13,weight:.semibold); Spacer(); Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary) }
+                    HStack { Text("症状/主诉：").appFont(13,weight:.semibold); Spacer(); Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary) }
                     ZStack(alignment:.bottomTrailing) {
                         TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260:58,maxHeight:symptomsExpanded ? 360:76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
                         Button(symptomsExpanded ? "收起":"展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)
@@ -329,7 +330,7 @@ struct EditorView: View {
                     ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}}
                     HStack { TextField("处方名称（保存时填写）",text:$formulaName); Button("保存处方"){let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines);if n.isEmpty{saveFormulaMessage="请先填写处方名称"}else{store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID);saveFormulaMessage=store.status};showFormulaMessage=true}.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID==nil) }
                     TextEditor(text:$draft.prescription).frame(minHeight:170).padding(4).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
-                    TextField("剂数",text:$draft.doses)
+                    HStack(spacing:8) { Text("剂数：").fixedSize(); TextField("请输入剂数",text:$draft.doses).frame(width:180); Spacer() }
                     Text(store.status).appFont(11).foregroundStyle(.secondary)
                 }
                 VStack(alignment:.leading,spacing:8) {
@@ -339,7 +340,7 @@ struct EditorView: View {
                 EditorSection(title:"病历图片") {
                     ImageGallery(files:draft.imageFiles,editable:true,onAdd:{draft.imageFiles.append(contentsOf:chooseImages())},onDelete:{name in draft.imageFiles.removeAll{$0==name}})
                     Divider()
-                    HStack(spacing:8) { Text("净重").fixedSize(); TextField("请输入数值",text:$draft.netWeight).frame(width:180); Text("g").foregroundStyle(.secondary); Spacer() }
+                    HStack(spacing:8) { Text("净重：").fixedSize(); TextField("请输入数值",text:$draft.netWeight).frame(width:180); Text("g").foregroundStyle(.secondary); Spacer() }
                 }
                 HStack { Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary);Spacer() }.padding(12).frame(maxWidth:.infinity).background(Color(nsColor:.controlBackgroundColor)).clipShape(RoundedRectangle(cornerRadius:10))
             }.padding(20).frame(maxWidth:.infinity,alignment:.leading)
