@@ -4,9 +4,9 @@
 2. 双击打开软件。
 3. 如果 macOS 提示无法验证开发者，请在“应用程序”中右键点击软件，选择“打开”，再确认一次。
 
-系统要求：macOS 11 或更高版本，支持 Apple 芯片和 Intel 芯片。
+系统要求：macOS 13 或更高版本。Universal 版支持 Apple 芯片和 Intel 芯片；AppleSilicon 版仅支持 M1/M2/M3/M4 等 Apple 芯片。
 
-界面字体使用 macOS 系统动态字体，会跟随系统的文字大小/辅助功能设置调整。
+软件右上角提供“字体设置”，可选择“小、中、大、极大”四档，设置会自动保存。
 
 软件首次运行会把内置数据库复制到：
 ~/Library/Application Support/ElectronicPrescriptionMac/clinic.sqlite
