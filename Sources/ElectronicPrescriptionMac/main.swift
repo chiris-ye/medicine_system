@@ -9,6 +9,21 @@ struct Medicine: Codable, Identifiable, Hashable { var id: String; var name: Str
 struct MedicinePriceLine: Identifiable { let id = UUID(); let name: String; let unit: String; let dose: Double; let price: Double; var amount: Double { dose * price } }
 struct ClinicData: Codable { var patients: [Patient]; var records: [VisitRecord]; var templates: [Formula]; var medicines: [Medicine] }
 
+private enum AppFontLevel: String, CaseIterable, Identifiable {
+    case small, medium, large, extraLarge
+    var id: String { rawValue }
+    var title: String { switch self { case .small: "小"; case .medium: "中"; case .large: "大"; case .extraLarge: "极大" } }
+    var scale: CGFloat { switch self { case .small: 1.0; case .medium: 1.22; case .large: 1.48; case .extraLarge: 1.78 } }
+}
+private struct AppFontScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+private extension EnvironmentValues { var appFontScale: CGFloat { get { self[AppFontScaleKey.self] } set { self[AppFontScaleKey.self] = newValue } } }
+private struct AppFontModifier: ViewModifier {
+    @Environment(\.appFontScale) private var scale
+    let size: CGFloat; let weight: Font.Weight
+    func body(content: Content) -> some View { content.font(.system(size: size * scale, weight: weight)) }
+}
+private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .regular) -> some View { modifier(AppFontModifier(size: size, weight: weight)) } }
+
 @MainActor final class ClinicStore: ObservableObject {
     private var db: OpaquePointer?
     @Published var patients: [Patient] = []; @Published var records: [VisitRecord] = []; @Published var formulas: [Formula] = []; @Published var medicines: [Medicine] = []
@@ -133,7 +148,7 @@ struct NewMedicineView: View {
     @State private var name = ""; @State private var pinyin = ""; @State private var usage = ""; @State private var unit = "g"; @State private var commonDose = ""; @State private var price = ""; @State private var category = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("新增药品").font(.title2.bold())
+            Text("新增药品").appFont(20, weight: .bold)
             TextField("药品名称（必填）", text: $name)
             HStack { TextField("拼音", text: $pinyin); TextField("单位，例如 g / 袋 / 盒", text: $unit) }
             HStack { TextField("常用剂量", text: $commonDose); TextField("单价（元）", text: $price) }
@@ -157,15 +172,15 @@ struct MedicineManagerView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Text("药品商品价格").font(.title2.bold()); Spacer(); TextField("搜索药品名称 / 拼音", text: $search).textFieldStyle(.roundedBorder).frame(width: 260); Button("新增药品") { showingNewMedicine = true }.buttonStyle(.borderedProminent); Button("完成") { dismiss() } }
-            Text("修改价格后点击右侧保存。中药饮片通常按数据库中的单位（如 g）计价。").font(.caption).foregroundStyle(.secondary)
+            HStack { Text("药品商品价格").appFont(20, weight: .bold); Spacer(); TextField("搜索药品名称 / 拼音", text: $search).textFieldStyle(.roundedBorder).frame(width: 260); Button("新增药品") { showingNewMedicine = true }.buttonStyle(.borderedProminent); Button("完成") { dismiss() } }
+            Text("修改价格后点击右侧保存。中药饮片通常按数据库中的单位（如 g）计价。").appFont(11).foregroundStyle(.secondary)
             List(filtered) { medicine in
                 let value = drafts[medicine.id] ?? medicine
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading) { Text(value.name); Text("\(value.usage)  ·  \(value.unit)").font(.caption).foregroundStyle(.secondary) }
+                    VStack(alignment: .leading) { Text(value.name); Text("\(value.usage)  ·  \(value.unit)").appFont(11).foregroundStyle(.secondary) }
                     Spacer()
                     TextField("价格", text: Binding(get: { value.price }, set: { var v = drafts[medicine.id] ?? medicine; v.price = $0; drafts[medicine.id] = v })).frame(width: 90)
-                    Text("元 / \(value.unit)").font(.caption).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
+                    Text("元 / \(value.unit)").appFont(11).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
                     Button("保存") { store.updateMedicine(drafts[medicine.id] ?? medicine); drafts[medicine.id] = nil }
                     Button("删除", role: .destructive) { medicineToDelete = medicine; confirmDeleteMedicine = true }
                 }.padding(.vertical, 3)
@@ -182,22 +197,23 @@ struct MedicineManagerView: View {
 }
 
 struct ContentView: View {
-    @StateObject private var store=ClinicStore(); @State private var showingNewVisit=false; @State private var showingMedicineManager=false; @State private var confirmDelete=false
+    @StateObject private var store=ClinicStore(); @State private var showingNewVisit=false; @State private var showingMedicineManager=false; @State private var showingFontSettings=false; @State private var confirmDelete=false
     var selectedRecord: VisitRecord? { store.selectedRecord }
     var body: some View {
         NavigationSplitView {
             VStack(alignment:.leading,spacing:8) {
-                Text("患者历史").font(.title2.bold()); TextField("姓名 / 电话",text:$store.search).textFieldStyle(.roundedBorder)
-                List(store.filteredPatients,selection:$store.selectedPatientID){p in VStack(alignment:.leading){Text(p.name).font(.headline);Text("\(p.gender)  \(p.phone)").font(.caption).foregroundStyle(.secondary)}.tag(p.id)}
-                Divider(); Text("历史病历").font(.headline).padding(.horizontal,4)
-                List(store.patientRecords,selection:$store.selectedRecordID){r in HStack{VStack(alignment:.leading){Text(r.displayDate.isEmpty ? (r.date ?? "未注明日期") : r.displayDate);Text(r.diagnosis.isEmpty ? "未填写诊断" : r.diagnosis).font(.caption)};Spacer();Image(systemName:"chevron.right").font(.caption).foregroundStyle(.secondary)}.tag(r.id).contextMenu { Button("删除病历", role:.destructive){store.selectedRecordID=r.id;confirmDelete=true} }}
-                Text(store.status).font(.caption).foregroundStyle(.secondary)
+                Text("患者历史").appFont(20, weight: .bold); TextField("姓名 / 电话",text:$store.search).textFieldStyle(.roundedBorder)
+                List(store.filteredPatients,selection:$store.selectedPatientID){p in VStack(alignment:.leading){Text(p.name).appFont(13, weight: .semibold);Text("\(p.gender)  \(p.phone)").appFont(11).foregroundStyle(.secondary)}.tag(p.id)}
+                Divider(); Text("历史病历").appFont(13, weight: .semibold).padding(.horizontal,4)
+                List(store.patientRecords,selection:$store.selectedRecordID){r in HStack{VStack(alignment:.leading){Text(r.displayDate.isEmpty ? (r.date ?? "未注明日期") : r.displayDate);Text(r.diagnosis.isEmpty ? "未填写诊断" : r.diagnosis).appFont(11)};Spacer();Image(systemName:"chevron.right").appFont(11).foregroundStyle(.secondary)}.tag(r.id).contextMenu { Button("删除病历", role:.destructive){store.selectedRecordID=r.id;confirmDelete=true} }}
+                Text(store.status).appFont(11).foregroundStyle(.secondary)
             }.padding().navigationSplitViewColumnWidth(min:300,ideal:360)
-        } detail: { if let r=selectedRecord { EditorView(record:r,store:store).id(r.id) } else { VStack{Image(systemName:"doc.text").font(.largeTitle);Text("请选择历史病历")}.foregroundStyle(.secondary) } }.frame(minWidth:1200,minHeight:760)
+        } detail: { if let r=selectedRecord { EditorView(record:r,store:store).id(r.id) } else { VStack{Image(systemName:"doc.text").appFont(26);Text("请选择历史病历")}.foregroundStyle(.secondary) } }.frame(minWidth:1200,minHeight:760)
         .onChange(of: store.selectedPatientID) { _ in store.selectedRecordID = store.patientRecords.first?.id }
-        .toolbar { ToolbarItem(placement: .primaryAction) { Button { showingMedicineManager = true } label: { Label("药品价格", systemImage: "dollarsign.circle") } }; ToolbarItem(placement: .primaryAction) { Button { showingNewVisit = true } label: { Label("新建病历", systemImage: "plus") } }; ToolbarItem(placement: .primaryAction) { Button { confirmDelete = true } label: { Label("删除病历", systemImage: "trash") }.disabled(store.selectedRecordID == nil) } }
+        .toolbar { ToolbarItem(placement: .primaryAction) { Button { showingFontSettings = true } label: { Label("字体设置", systemImage: "textformat.size") } }; ToolbarItem(placement: .primaryAction) { Button { showingMedicineManager = true } label: { Label("药品价格", systemImage: "dollarsign.circle") } }; ToolbarItem(placement: .primaryAction) { Button { showingNewVisit = true } label: { Label("新建病历", systemImage: "plus") } }; ToolbarItem(placement: .primaryAction) { Button { confirmDelete = true } label: { Label("删除病历", systemImage: "trash") }.disabled(store.selectedRecordID == nil) } }
         .sheet(isPresented: $showingNewVisit) { NewVisitView(store: store) }
         .sheet(isPresented: $showingMedicineManager) { MedicineManagerView(store: store) }
+        .sheet(isPresented: $showingFontSettings) { FontSettingsView() }
         .alert("删除这条历史病历？", isPresented:$confirmDelete) { Button("取消", role:.cancel){}; Button("删除", role:.destructive){ if let id=store.selectedRecordID { store.delete(recordID:id) } } } message: { Text("删除后不会影响患者档案，但这条就诊记录将从历史中移除。") }
     }
 }
@@ -262,7 +278,7 @@ struct EditorView: View {
         // Chinese input is a keyword match against the formula name.
         return store.formulas.filter { $0.name.localizedCaseInsensitiveContains(key) }
     }
-    var body: some View { let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0); return Form { Section("患者信息"){HStack{TextField("姓名",text:$draft.name);TextField("性别",text:$draft.gender);TextField("年龄",text:$draft.age)};TextField("电话",text:$draft.phone);HStack{Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate);Text("科别：\(draft.department)")}};Section("病历"){TextField("诊断",text:$draft.diagnosis);HStack{Text("症状/主诉").font(.headline);Spacer();Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary)};ZStack(alignment:.bottomTrailing){TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260 : 58, maxHeight:symptomsExpanded ? 360 : 76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)));Button(symptomsExpanded ? "收起" : "展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.font(.caption).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)}};Section("快速选方"){TextField("搜索方名 / 拼音",text:$formulaSearch);ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}};HStack{TextField("处方名称（保存时填写）",text:$formulaName);Button("保存处方") { let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines); if n.isEmpty { saveFormulaMessage="请先填写处方名称" } else { store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID); saveFormulaMessage=store.status }; showFormulaMessage=true }.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID == nil)};TextEditor(text:$draft.prescription).frame(minHeight:170);TextField("剂数",text:$draft.doses);Text(store.status).font(.caption).foregroundStyle(.secondary)};Section { if pricingExpanded { if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。" ).foregroundStyle(.secondary) } else { let typeCount = Set(pricing.0.map { "\($0.name)|\($0.unit)" }).count; Text("识别到 \(typeCount) 种药物").font(.caption).foregroundStyle(.secondary); ForEach(pricing.0) { line in HStack { Text(line.name); Spacer(); if line.price > 0 { Text(String(format: "%.2f %@ × %.3f元 = %.2f元", line.dose, line.unit, line.price, line.amount)) } } }; HStack { Spacer(); Text("合计（\(draft.doses.isEmpty ? "1" : draft.doses)剂）").bold(); Text(String(format: "¥%.2f", pricing.1)).bold().foregroundStyle(.blue) } }} } header: { HStack { Text("处方划价"); Spacer(); Button(pricingExpanded ? "收起" : "划价") { pricingExpanded.toggle() }.buttonStyle(.borderedProminent) } };Section("病历图片"){ImageGallery(files:draft.imageFiles, editable:true, onAdd:{draft.imageFiles.append(contentsOf: chooseImages())}, onDelete:{name in draft.imageFiles.removeAll{$0 == name}})};HStack{Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary)}}.formStyle(.grouped).padding().navigationTitle("门诊电子处方 · 病历编辑").alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}.alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}}
+    var body: some View { let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0); return Form { Section("患者信息"){HStack{TextField("姓名",text:$draft.name);TextField("性别",text:$draft.gender);TextField("年龄",text:$draft.age)};TextField("电话",text:$draft.phone);HStack{Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate);Text("科别：\(draft.department)")}};Section("病历"){TextField("诊断",text:$draft.diagnosis);HStack{Text("症状/主诉").appFont(13, weight:.semibold);Spacer();Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary)};ZStack(alignment:.bottomTrailing){TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260 : 58, maxHeight:symptomsExpanded ? 360 : 76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)));Button(symptomsExpanded ? "收起" : "展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)}};Section("快速选方"){TextField("搜索方名 / 拼音",text:$formulaSearch);ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}};HStack{TextField("处方名称（保存时填写）",text:$formulaName);Button("保存处方") { let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines); if n.isEmpty { saveFormulaMessage="请先填写处方名称" } else { store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID); saveFormulaMessage=store.status }; showFormulaMessage=true }.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID == nil)};TextEditor(text:$draft.prescription).frame(minHeight:170);TextField("剂数",text:$draft.doses);Text(store.status).appFont(11).foregroundStyle(.secondary)};Section { if pricingExpanded { if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。" ).foregroundStyle(.secondary) } else { let typeCount = Set(pricing.0.map { "\($0.name)|\($0.unit)" }).count; Text("识别到 \(typeCount) 种药物").appFont(11).foregroundStyle(.secondary); ForEach(pricing.0) { line in HStack { Text(line.name); Spacer(); if line.price > 0 { Text(String(format: "%.2f %@ × %.3f元 = %.2f元", line.dose, line.unit, line.price, line.amount)) } } }; HStack { Spacer(); Text("合计（\(draft.doses.isEmpty ? "1" : draft.doses)剂）").bold(); Text(String(format: "¥%.2f", pricing.1)).bold().foregroundStyle(.blue) } }} } header: { HStack { Text("处方划价"); Spacer(); Button(pricingExpanded ? "收起" : "划价") { pricingExpanded.toggle() }.buttonStyle(.borderedProminent) } };Section("病历图片"){ImageGallery(files:draft.imageFiles, editable:true, onAdd:{draft.imageFiles.append(contentsOf: chooseImages())}, onDelete:{name in draft.imageFiles.removeAll{$0 == name}})};HStack{Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary)}}.formStyle(.grouped).padding().navigationTitle("门诊电子处方 · 病历编辑").alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}.alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}}
 }
 
 @MainActor private func chooseImages() -> [String] {
@@ -295,7 +311,7 @@ struct ImageGallery: View {
     @State private var selected: URL?
     private var imageDirectory: URL { Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("图片资料") }
     var body: some View {
-        VStack(alignment: .leading) { ScrollView(.horizontal) { HStack(spacing: 10) { ForEach(files, id: \.self) { name in if let url = imageURL(name), let ns = NSImage(contentsOf: url) { ZStack(alignment:.topTrailing) { Button { selected = url } label: { Image(nsImage: ns).resizable().scaledToFill().frame(width: 120, height: 90).clipped().cornerRadius(5) }.buttonStyle(.plain); if editable { Button { onDelete(name) } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(.red).background(.white, in:Circle()) }.buttonStyle(.plain).padding(3) } } } }; if editable { HStack { Button { imagePasteRequested = false; onAdd() } label: { Label("上传图片", systemImage:"plus") }.buttonStyle(.bordered); Button { imagePasteRequested = true; onAdd() } label: { Label("粘贴图片", systemImage:"doc.on.clipboard") }.buttonStyle(.bordered) } } } }.frame(minHeight: 100, maxHeight: 120); if files.isEmpty { Text("此病历没有关联图片").foregroundStyle(.secondary) } }.sheet(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) { if let url = selected { VStack { Image(nsImage: NSImage(contentsOf: url) ?? NSImage()).resizable().scaledToFit().padding(); Text(url.lastPathComponent).font(.caption) }.frame(minWidth: 700, minHeight: 500).padding() } }
+        VStack(alignment: .leading) { ScrollView(.horizontal) { HStack(spacing: 10) { ForEach(files, id: \.self) { name in if let url = imageURL(name), let ns = NSImage(contentsOf: url) { ZStack(alignment:.topTrailing) { Button { selected = url } label: { Image(nsImage: ns).resizable().scaledToFill().frame(width: 120, height: 90).clipped().cornerRadius(5) }.buttonStyle(.plain); if editable { Button { onDelete(name) } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(.red).background(.white, in:Circle()) }.buttonStyle(.plain).padding(3) } } } }; if editable { HStack { Button { imagePasteRequested = false; onAdd() } label: { Label("上传图片", systemImage:"plus") }.buttonStyle(.bordered); Button { imagePasteRequested = true; onAdd() } label: { Label("粘贴图片", systemImage:"doc.on.clipboard") }.buttonStyle(.bordered) } } } }.frame(minHeight: 100, maxHeight: 120); if files.isEmpty { Text("此病历没有关联图片").foregroundStyle(.secondary) } }.sheet(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) { if let url = selected { VStack { Image(nsImage: NSImage(contentsOf: url) ?? NSImage()).resizable().scaledToFit().padding(); Text(url.lastPathComponent).appFont(11) }.frame(minWidth: 700, minHeight: 500).padding() } }
     }
     private func imageURL(_ name: String) -> URL? { let support = FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("ElectronicPrescriptionMac/images").appendingPathComponent(name); if FileManager.default.fileExists(atPath:support.path) { return support }; let u=imageDirectory.appendingPathComponent(name); return FileManager.default.fileExists(atPath:u.path) ? u : nil }
 }
@@ -306,11 +322,11 @@ struct NewVisitView: View {
     var matches: [Patient] { query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : store.uniquePatients.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.phone.contains(query) }.prefix(10).map { $0 } }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("新建病历").font(.title2.bold())
+            Text("新建病历").appFont(20, weight: .bold)
             Text("先选择患者；选择后会立即新增一条空白历史病历，并在右侧编辑。") .foregroundStyle(.secondary)
             TextField("输入姓名或电话", text: $query).textFieldStyle(.roundedBorder)
             if !matches.isEmpty {
-                Text("匹配到的患者").font(.headline)
+                Text("匹配到的患者").appFont(13, weight: .semibold)
                 List(matches) { p in Button { dismiss(); DispatchQueue.main.async { store.createBlankVisit(for: p) } } label: { HStack { Text(p.name).bold(); Text(p.gender); Text(p.phone).foregroundStyle(.secondary); Spacer(); Image(systemName: "chevron.right") } } }
             }
             Button("＋ 新建此患者") { createNew() }.disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -324,39 +340,30 @@ struct NewVisitView: View {
     }
 }
 
-private func macSystemTextSize() -> DynamicTypeSize {
-    // macOS stores the user's Text Size selection in the global preferences
-    // using UIKit-compatible category names, but SwiftUI App views do not
-    // consistently receive it as dynamicTypeSize. Map it explicitly.
-    let value = UserDefaults.standard.string(forKey: "UIPreferredContentSizeCategoryName") ?? "UICTContentSizeCategoryL"
-    switch value {
-    case let s where s.contains("AccessibilityXXXL"): return .accessibility5
-    case let s where s.contains("AccessibilityXXL"): return .accessibility4
-    case let s where s.contains("AccessibilityXL"): return .accessibility3
-    case let s where s.contains("AccessibilityL"): return .accessibility2
-    case let s where s.contains("AccessibilityM"): return .accessibility1
-    case let s where s.contains("XXXL"): return .xxxLarge
-    case let s where s.contains("XXL"): return .xxLarge
-    case let s where s.contains("XL"): return .xLarge
-    case let s where s.hasSuffix("XS"): return .xSmall
-    case let s where s.hasSuffix("S"): return .small
-    case let s where s.hasSuffix("M"): return .medium
-    default: return .large
+private struct FontSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("appFontLevel") private var storedLevel = AppFontLevel.small.rawValue
+    private var level: Binding<AppFontLevel> { Binding(get: { AppFontLevel(rawValue: storedLevel) ?? .small }, set: { storedLevel = $0.rawValue }) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("字体大小").appFont(20, weight: .bold)
+            Text("选择后立即应用到整个软件，并自动保存设置。当前默认大小为“小”。").foregroundStyle(.secondary)
+            Picker("字体大小", selection: level) { ForEach(AppFontLevel.allCases) { item in Text(item.title).tag(item) } }.pickerStyle(.segmented)
+            GroupBox("预览") { VStack(alignment: .leading, spacing: 8) { Text("患者姓名与病历内容").appFont(13, weight: .semibold); Text("处方：黄芪10g  当归10g  白术10g"); Button("示例按钮") {} }.frame(maxWidth: .infinity, alignment: .leading).padding(8) }
+            HStack { Spacer(); Button("完成") { dismiss() }.keyboardShortcut(.defaultAction) }
+        }.padding(24).frame(width: 520)
     }
 }
 
-private struct SystemTextSizeModifier: ViewModifier {
-    @State private var textSize = macSystemTextSize()
+private struct AppFontRootModifier: ViewModifier {
+    @AppStorage("appFontLevel") private var storedLevel = AppFontLevel.small.rawValue
+    private var scale: CGFloat { (AppFontLevel(rawValue: storedLevel) ?? .small).scale }
     func body(content: Content) -> some View {
         content
-            .environment(\.dynamicTypeSize, textSize)
-            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in textSize = macSystemTextSize() }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in textSize = macSystemTextSize() }
+            .environment(\.appFontScale, scale)
+            .font(.system(size: 13 * scale))
+            .environment(\.defaultMinListRowHeight, 24 * scale)
     }
 }
 
-private extension View {
-    func followsMacSystemTextSize() -> some View { modifier(SystemTextSizeModifier()) }
-}
-
-@main struct ElectronicPrescriptionMacApp: App { var body: some Scene { WindowGroup { ContentView().followsMacSystemTextSize() } } }
+@main struct ElectronicPrescriptionMacApp: App { var body: some Scene { WindowGroup { ContentView().modifier(AppFontRootModifier()) } } }
