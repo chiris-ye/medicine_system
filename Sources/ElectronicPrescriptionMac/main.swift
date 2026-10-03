@@ -323,4 +323,40 @@ struct NewVisitView: View {
         dismiss(); DispatchQueue.main.async { store.createBlankVisit(for: p) }
     }
 }
-@main struct ElectronicPrescriptionMacApp: App { var body: some Scene { WindowGroup { ContentView() } } }
+
+private func macSystemTextSize() -> DynamicTypeSize {
+    // macOS stores the user's Text Size selection in the global preferences
+    // using UIKit-compatible category names, but SwiftUI App views do not
+    // consistently receive it as dynamicTypeSize. Map it explicitly.
+    let value = UserDefaults.standard.string(forKey: "UIPreferredContentSizeCategoryName") ?? "UICTContentSizeCategoryL"
+    switch value {
+    case let s where s.contains("AccessibilityXXXL"): return .accessibility5
+    case let s where s.contains("AccessibilityXXL"): return .accessibility4
+    case let s where s.contains("AccessibilityXL"): return .accessibility3
+    case let s where s.contains("AccessibilityL"): return .accessibility2
+    case let s where s.contains("AccessibilityM"): return .accessibility1
+    case let s where s.contains("XXXL"): return .xxxLarge
+    case let s where s.contains("XXL"): return .xxLarge
+    case let s where s.contains("XL"): return .xLarge
+    case let s where s.hasSuffix("XS"): return .xSmall
+    case let s where s.hasSuffix("S"): return .small
+    case let s where s.hasSuffix("M"): return .medium
+    default: return .large
+    }
+}
+
+private struct SystemTextSizeModifier: ViewModifier {
+    @State private var textSize = macSystemTextSize()
+    func body(content: Content) -> some View {
+        content
+            .environment(\.dynamicTypeSize, textSize)
+            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in textSize = macSystemTextSize() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in textSize = macSystemTextSize() }
+    }
+}
+
+private extension View {
+    func followsMacSystemTextSize() -> some View { modifier(SystemTextSizeModifier()) }
+}
+
+@main struct ElectronicPrescriptionMacApp: App { var body: some Scene { WindowGroup { ContentView().followsMacSystemTextSize() } } }
