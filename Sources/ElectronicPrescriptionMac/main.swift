@@ -3,7 +3,7 @@ import AppKit
 import SQLite3
 
 struct Patient: Codable, Identifiable, Hashable { var id: String; var name: String; var gender: String; var birthOrAge: String; var medicalNo: String; var phone: String; var address: String; var feeType: String; var diagnosis: String; var allergy: String }
-struct VisitRecord: Codable, Identifiable, Hashable { var id: String; var name: String; var gender: String; var age: String; var department: String; var date: String?; var diagnosis: String; var doctor: String; var phone: String; var total: String; var visitKey: String; var allergy: String; var feeType: String; var displayDate: String; var patientKey: String; var prescription: String; var extraPrescription: String; var symptoms: String; var category: String; var dispensed: String; var billing: String; var record: String; var doses: String; var imageFiles: [String] }
+struct VisitRecord: Codable, Identifiable, Hashable { var id: String; var name: String; var gender: String; var age: String; var department: String; var date: String?; var diagnosis: String; var doctor: String; var phone: String; var total: String; var visitKey: String; var allergy: String; var feeType: String; var displayDate: String; var patientKey: String; var prescription: String; var extraPrescription: String; var symptoms: String; var category: String; var dispensed: String; var billing: String; var record: String; var doses: String; var netWeight: String; var imageFiles: [String] }
 struct Formula: Codable, Identifiable, Hashable { var id: String; var name: String; var content: String; var pinyin: String; var category: String; var sort: String }
 struct Medicine: Codable, Identifiable, Hashable { var id: String; var name: String; var pinyin: String; var usage: String; var unit: String; var commonDose: String; var price: String; var category: String }
 struct MedicinePriceLine: Identifiable { let id = UUID(); let name: String; let unit: String; let dose: Double; let price: Double; var amount: Double { dose * price } }
@@ -44,6 +44,7 @@ private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .re
             let target = dir.appendingPathComponent("clinic.sqlite")
             if !FileManager.default.fileExists(atPath: target.path), let bundled = Bundle.main.url(forResource: "clinic", withExtension: "sqlite") { try FileManager.default.copyItem(at: bundled, to: target) }
             guard sqlite3_open(target.path, &db) == SQLITE_OK else { status="数据库打开失败"; return }
+            if !rows("PRAGMA table_info(visits)").contains(where: { $0.count > 1 && $0[1] == "net_weight" }) { exec("ALTER TABLE visits ADD COLUMN net_weight TEXT DEFAULT ''") }
             loadSQLite(); status="已加载 \(records.count) 条历史档案、\(formulas.count) 个常用方"
         } catch { status="数据库初始化失败：\(error.localizedDescription)" }
     }
@@ -55,9 +56,9 @@ private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .re
     private func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "''") + "'" }
     func loadSQLite() {
         patients=rows("SELECT id,name,gender,age,medical_no,phone,address,fee_type,diagnosis,allergy FROM patients").map{Patient(id:$0[0],name:$0[1],gender:$0[2],birthOrAge:$0[3],medicalNo:$0[4],phone:$0[5],address:$0[6],feeType:$0[7],diagnosis:$0[8],allergy:$0[9])}
-        records=rows("SELECT id,name,gender,age,department,visit_date,diagnosis,doctor,phone,total,visit_key,allergy,fee_type,display_date,patient_key,prescription,extra_prescription,symptoms,category,dispensed,billing,doses FROM visits ORDER BY display_date DESC").map{ row in
+        records=rows("SELECT id,name,gender,age,department,visit_date,diagnosis,doctor,phone,total,visit_key,allergy,fee_type,display_date,patient_key,prescription,extra_prescription,symptoms,category,dispensed,billing,doses,net_weight FROM visits ORDER BY display_date DESC").map{ row in
             let profilePhone = patients.first(where: {$0.name.trimmingCharacters(in:.whitespacesAndNewlines) == row[1].trimmingCharacters(in:.whitespacesAndNewlines)})?.phone ?? ""
-            return VisitRecord(id:row[0],name:row[1],gender:row[2],age:row[3],department:row[4],date:row[5].isEmpty ? nil : row[5],diagnosis:row[6],doctor:row[7],phone:row[8].isEmpty ? profilePhone : row[8],total:row[9],visitKey:row[10],allergy:row[11],feeType:row[12],displayDate:row[13],patientKey:row[14],prescription:row[15],extraPrescription:row[16],symptoms:row[17].contains("$") ? "" : row[17],category:row[18],dispensed:row[19],billing:row[20],record:"",doses:row[21],imageFiles:[])
+            return VisitRecord(id:row[0],name:row[1],gender:row[2],age:row[3],department:row[4],date:row[5].isEmpty ? nil : row[5],diagnosis:row[6],doctor:row[7],phone:row[8].isEmpty ? profilePhone : row[8],total:row[9],visitKey:row[10],allergy:row[11],feeType:row[12],displayDate:row[13],patientKey:row[14],prescription:row[15],extraPrescription:row[16],symptoms:row[17].contains("$") ? "" : row[17],category:row[18],dispensed:row[19],billing:row[20],record:"",doses:row[21],netWeight:row[22],imageFiles:[])
         }
         var recordIndexes: [String:Int] = [:]; for (i,r) in records.enumerated() { recordIndexes[r.id] = i }
         for row in rows("SELECT visit_id,file_name FROM visit_images") { if let i=recordIndexes[row[0]] { records[i].imageFiles.append(row[1]) } }
@@ -78,8 +79,8 @@ private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .re
         guard let i=records.firstIndex(where:{$0.id==r.id}) else{return}
         records[i]=r
         let exists = !rows("SELECT id FROM visits WHERE id=\(q(r.id))").isEmpty
-        if exists { exec("UPDATE visits SET name=\(q(r.name)),gender=\(q(r.gender)),age=\(q(r.age)),diagnosis=\(q(r.diagnosis)),phone=\(q(r.phone)),allergy=\(q(r.allergy)),fee_type=\(q(r.feeType)),prescription=\(q(r.prescription)),symptoms=\(q(r.symptoms)),doses=\(q(r.doses)),display_date=\(q(r.displayDate)) WHERE id=\(q(r.id))") }
-        else if let pid=selectedPatientID { exec("INSERT OR IGNORE INTO patients(id,name,gender,age,phone,fee_type,allergy) VALUES(\(q(pid)),\(q(r.name)),\(q(r.gender)),\(q(r.age)),\(q(r.phone)),\(q(r.feeType)),\(q(r.allergy))); INSERT INTO visits(id,patient_id,name,gender,age,department,visit_date,diagnosis,doctor,phone,total,visit_key,allergy,fee_type,display_date,patient_key,prescription,extra_prescription,symptoms,category,dispensed,billing,doses) VALUES(\(q(r.id)),\(q(pid)),\(q(r.name)),\(q(r.gender)),\(q(r.age)),\(q(r.department)),\(q(r.date ?? "")),\(q(r.diagnosis)),\(q(r.doctor)),\(q(r.phone)),\(q(r.total)),\(q(r.visitKey)),\(q(r.allergy)),\(q(r.feeType)),\(q(r.displayDate)),\(q(r.patientKey)),\(q(r.prescription)),\(q(r.extraPrescription)),\(q(r.symptoms)),\(q(r.category)),\(q(r.dispensed)),\(q(r.billing)),\(q(r.doses)))") }
+        if exists { exec("UPDATE visits SET name=\(q(r.name)),gender=\(q(r.gender)),age=\(q(r.age)),diagnosis=\(q(r.diagnosis)),phone=\(q(r.phone)),allergy=\(q(r.allergy)),fee_type=\(q(r.feeType)),prescription=\(q(r.prescription)),symptoms=\(q(r.symptoms)),doses=\(q(r.doses)),net_weight=\(q(r.netWeight)),display_date=\(q(r.displayDate)) WHERE id=\(q(r.id))") }
+        else if let pid=selectedPatientID { exec("INSERT OR IGNORE INTO patients(id,name,gender,age,phone,fee_type,allergy) VALUES(\(q(pid)),\(q(r.name)),\(q(r.gender)),\(q(r.age)),\(q(r.phone)),\(q(r.feeType)),\(q(r.allergy))); INSERT INTO visits(id,patient_id,name,gender,age,department,visit_date,diagnosis,doctor,phone,total,visit_key,allergy,fee_type,display_date,patient_key,prescription,extra_prescription,symptoms,category,dispensed,billing,doses,net_weight) VALUES(\(q(r.id)),\(q(pid)),\(q(r.name)),\(q(r.gender)),\(q(r.age)),\(q(r.department)),\(q(r.date ?? "")),\(q(r.diagnosis)),\(q(r.doctor)),\(q(r.phone)),\(q(r.total)),\(q(r.visitKey)),\(q(r.allergy)),\(q(r.feeType)),\(q(r.displayDate)),\(q(r.patientKey)),\(q(r.prescription)),\(q(r.extraPrescription)),\(q(r.symptoms)),\(q(r.category)),\(q(r.dispensed)),\(q(r.billing)),\(q(r.doses)),\(q(r.netWeight)))") }
         exec("DELETE FROM visit_images WHERE visit_id=\(q(r.id))")
         for image in r.imageFiles { exec("INSERT OR IGNORE INTO visit_images(visit_id,file_name) VALUES(\(q(r.id)),\(q(image)))") }
         if let pid = selectedPatientID, let p = patients.firstIndex(where: { $0.id == pid }) {
@@ -95,7 +96,7 @@ private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .re
     func createBlankVisit(for patient: Patient) {
         let f=DateFormatter(); f.dateFormat="yyyyMMddHHmmss"; let now=f.string(from:Date())
         let display=DateFormatter(); display.dateFormat="yyyy年MM月dd日"
-        let r=VisitRecord(id: now+UUID().uuidString.prefix(8), name:patient.name, gender:patient.gender, age:patient.birthOrAge, department:"全科", date:Date().ISO8601Format(), diagnosis:"", doctor:"", phone:patient.phone, total:"", visitKey:now, allergy:patient.allergy, feeType:patient.feeType, displayDate:display.string(from:Date()), patientKey:patient.name, prescription:"", extraPrescription:"", symptoms:"", category:"中医", dispensed:"", billing:"", record:"", doses:"", imageFiles:[])
+        let r=VisitRecord(id: now+UUID().uuidString.prefix(8), name:patient.name, gender:patient.gender, age:patient.birthOrAge, department:"全科", date:Date().ISO8601Format(), diagnosis:"", doctor:"", phone:patient.phone, total:"", visitKey:now, allergy:patient.allergy, feeType:patient.feeType, displayDate:display.string(from:Date()), patientKey:patient.name, prescription:"", extraPrescription:"", symptoms:"", category:"中医", dispensed:"", billing:"", record:"", doses:"", netWeight:"", imageFiles:[])
         if !patients.contains(where: { $0.id == patient.id }) { patients.append(patient) }
         records.append(r); rebuildIndexes(); selectedPatientID=patient.id; selectedRecordID=r.id; status="已新建空白病历，请在右侧编辑后点击保存修改"
     }
@@ -262,9 +263,27 @@ private func calculatePrescription(_ text: String, dosesText: String, medicines:
     return (result, result.reduce(0) { $0 + $1.amount } * max(count, 1))
 }
 
+private struct EditorSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).appFont(13, weight: .semibold)
+            VStack(alignment: .leading, spacing: 10) { content() }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct EditorView: View {
     let record: VisitRecord; @ObservedObject var store: ClinicStore; @State private var formulaSearch=""; @State private var formulaName=""; @State private var selectedFormulaID:String?; @State private var confirmDeleteFormula=false; @State private var saveFormulaMessage=""; @State private var showFormulaMessage=false; @State private var draft:VisitRecord; @State private var symptomsExpanded = false; @State private var pricingExpanded = false
     init(record:VisitRecord,store:ClinicStore){self.record=record;self.store=store;_draft=State(initialValue:record)}
+    private func infoField(_ title: String, text: Binding<String>, width: CGFloat) -> some View {
+        HStack(spacing: 8) { Text(title).fixedSize(); TextField("", text: text).textFieldStyle(.plain).frame(width: width, alignment: .leading) }
+    }
     var filteredFormulas: [Formula] {
         let key = formulaSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         if key.isEmpty { return Array(store.formulas.prefix(40)) }
@@ -280,7 +299,55 @@ struct EditorView: View {
         // Chinese input is a keyword match against the formula name.
         return store.formulas.filter { $0.name.localizedCaseInsensitiveContains(key) }
     }
-    var body: some View { let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0); return Form { Section("患者信息"){HStack{TextField("姓名",text:$draft.name);TextField("性别",text:$draft.gender);TextField("年龄",text:$draft.age)};TextField("电话",text:$draft.phone);HStack{Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate);Text("科别：\(draft.department)")}};Section("病历"){TextField("诊断",text:$draft.diagnosis);HStack{Text("症状/主诉").appFont(13, weight:.semibold);Spacer();Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary)};ZStack(alignment:.bottomTrailing){TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260 : 58, maxHeight:symptomsExpanded ? 360 : 76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)));Button(symptomsExpanded ? "收起" : "展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)}};Section("快速选方"){TextField("搜索方名 / 拼音",text:$formulaSearch);ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}};HStack{TextField("处方名称（保存时填写）",text:$formulaName);Button("保存处方") { let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines); if n.isEmpty { saveFormulaMessage="请先填写处方名称" } else { store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID); saveFormulaMessage=store.status }; showFormulaMessage=true }.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID == nil)};TextEditor(text:$draft.prescription).frame(minHeight:170);TextField("剂数",text:$draft.doses);Text(store.status).appFont(11).foregroundStyle(.secondary)};Section { if pricingExpanded { if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。" ).foregroundStyle(.secondary) } else { let typeCount = Set(pricing.0.map { "\($0.name)|\($0.unit)" }).count; Text("识别到 \(typeCount) 种药物").appFont(11).foregroundStyle(.secondary); ForEach(pricing.0) { line in HStack { Text(line.name); Spacer(); if line.price > 0 { Text(String(format: "%.2f %@ × %.3f元 = %.2f元", line.dose, line.unit, line.price, line.amount)) } } }; HStack { Spacer(); Text("合计（\(draft.doses.isEmpty ? "1" : draft.doses)剂）").bold(); Text(String(format: "¥%.2f", pricing.1)).bold().foregroundStyle(.blue) } }} } header: { HStack { Text("处方划价"); Spacer(); Button(pricingExpanded ? "收起" : "划价") { pricingExpanded.toggle() }.buttonStyle(.borderedProminent) } };Section("病历图片"){ImageGallery(files:draft.imageFiles, editable:true, onAdd:{draft.imageFiles.append(contentsOf: chooseImages())}, onDelete:{name in draft.imageFiles.removeAll{$0 == name}})};HStack{Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary)}}.formStyle(.grouped).padding().navigationTitle("门诊电子处方 · 病历编辑").alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}.alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}}
+    var body: some View {
+        let pricing = pricingExpanded ? calculatePrescription(draft.prescription, dosesText: draft.doses, medicines: store.medicines) : ([], 0.0)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                EditorSection(title: "患者信息") {
+                    HStack(spacing: 32) {
+                        infoField("姓名", text:$draft.name, width:180)
+                        infoField("性别", text:$draft.gender, width:80)
+                        infoField("年龄", text:$draft.age, width:80)
+                        Spacer(minLength:0)
+                    }
+                    Divider()
+                    HStack(spacing:8) { Text("电话").fixedSize(); TextField("",text:$draft.phone).textFieldStyle(.plain).frame(width:260,alignment:.leading); Spacer() }
+                    Divider()
+                    HStack(spacing:24) { HStack(spacing:8){Text("就诊日期");Text(draft.displayDate.isEmpty ? (draft.date ?? "") : draft.displayDate)}; HStack(spacing:8){Text("科别：");Text(draft.department)}; Spacer() }
+                }
+                EditorSection(title: "病历") {
+                    HStack(spacing:8) { Text("诊断").fixedSize(); TextField("",text:$draft.diagnosis).textFieldStyle(.plain); }
+                    Divider()
+                    HStack { Text("症状/主诉").appFont(13,weight:.semibold); Spacer(); Text(draft.symptoms.isEmpty ? "未填写" : "已填写").foregroundStyle(.secondary) }
+                    ZStack(alignment:.bottomTrailing) {
+                        TextEditor(text:$draft.symptoms).frame(minHeight:symptomsExpanded ? 260:58,maxHeight:symptomsExpanded ? 360:76).padding(6).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
+                        Button(symptomsExpanded ? "收起":"展开"){withAnimation(.easeInOut){symptomsExpanded.toggle()}}.appFont(11).buttonStyle(.borderless).padding(.trailing,10).padding(.bottom,7)
+                    }
+                }
+                EditorSection(title: "快速选方") {
+                    TextField("搜索方名 / 拼音",text:$formulaSearch)
+                    ScrollView(.horizontal){HStack{ForEach(filteredFormulas.prefix(12)){f in Button(f.name){selectedFormulaID=f.id;formulaName=f.name;draft.prescription=f.content}}}}
+                    HStack { TextField("处方名称（保存时填写）",text:$formulaName); Button("保存处方"){let n=formulaName.trimmingCharacters(in:.whitespacesAndNewlines);if n.isEmpty{saveFormulaMessage="请先填写处方名称"}else{store.saveFormula(name:n,content:draft.prescription,existingID:selectedFormulaID);saveFormulaMessage=store.status};showFormulaMessage=true}.buttonStyle(.borderedProminent);Button("删除处方",role:.destructive){confirmDeleteFormula=true}.disabled(selectedFormulaID==nil) }
+                    TextEditor(text:$draft.prescription).frame(minHeight:170).padding(4).background(Color(nsColor:.textBackgroundColor)).overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:.separatorColor)))
+                    TextField("剂数",text:$draft.doses)
+                    Text(store.status).appFont(11).foregroundStyle(.secondary)
+                }
+                VStack(alignment:.leading,spacing:8) {
+                    HStack { Text("处方划价").appFont(13,weight:.semibold);Spacer();Button(pricingExpanded ? "收起":"划价"){pricingExpanded.toggle()}.buttonStyle(.borderedProminent) }
+                    if pricingExpanded { VStack(alignment:.leading,spacing:8) { if pricing.0.isEmpty { Text("暂未识别到带剂量的药品。").foregroundStyle(.secondary) } else { let typeCount=Set(pricing.0.map{"\($0.name)|\($0.unit)"}).count;Text("识别到 \(typeCount) 种药物").appFont(11).foregroundStyle(.secondary);ForEach(pricing.0){line in HStack{Text(line.name);Spacer();if line.price>0{Text(String(format:"%.2f %@ × %.3f元 = %.2f元",line.dose,line.unit,line.price,line.amount))}}};HStack{Spacer();Text("合计（\(draft.doses.isEmpty ? "1":draft.doses)剂）").bold();Text(String(format:"¥%.2f",pricing.1)).bold().foregroundStyle(.blue)}} }.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color(nsColor:.controlBackgroundColor)).clipShape(RoundedRectangle(cornerRadius:10)) }
+                }.frame(maxWidth:.infinity)
+                EditorSection(title:"病历图片") {
+                    ImageGallery(files:draft.imageFiles,editable:true,onAdd:{draft.imageFiles.append(contentsOf:chooseImages())},onDelete:{name in draft.imageFiles.removeAll{$0==name}})
+                    Divider()
+                    HStack(spacing:8) { Text("净重").fixedSize(); TextField("请输入数值",text:$draft.netWeight).frame(width:180); Text("g").foregroundStyle(.secondary); Spacer() }
+                }
+                HStack { Button("保存修改"){store.save(draft)}.keyboardShortcut("s");Button("恢复原内容"){draft=record};Text("处方类别：\(draft.category)").foregroundStyle(.secondary);Spacer() }.padding(12).frame(maxWidth:.infinity).background(Color(nsColor:.controlBackgroundColor)).clipShape(RoundedRectangle(cornerRadius:10))
+            }.padding(20).frame(maxWidth:.infinity,alignment:.leading)
+        }
+        .navigationTitle("门诊电子处方 · 病历编辑")
+        .alert("删除这个处方？",isPresented:$confirmDeleteFormula){Button("取消",role:.cancel){};Button("删除",role:.destructive){if let id=selectedFormulaID{store.deleteFormula(id:id);selectedFormulaID=nil;formulaName=""}}}message:{Text("删除不会影响已经保存到历史病历中的处方内容。")}
+        .alert("保存处方",isPresented:$showFormulaMessage){Button("确定",role:.cancel){}}message:{Text(saveFormulaMessage)}
+    }
 }
 
 @MainActor private func chooseImages() -> [String] {
