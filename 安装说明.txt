@@ -6,6 +6,8 @@
 
 系统要求：macOS 11 或更高版本，支持 Apple 芯片和 Intel 芯片。
 
+界面字体使用 macOS 系统动态字体，会跟随系统的文字大小/辅助功能设置调整。
+
 软件首次运行会把内置数据库复制到：
 ~/Library/Application Support/ElectronicPrescriptionMac/clinic.sqlite
 之后修改的药品价格、病历和图片会保存在该位置，不会修改原始 .dat 文件。

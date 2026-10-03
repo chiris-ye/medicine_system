@@ -193,7 +193,7 @@ struct ContentView: View {
                 List(store.patientRecords,selection:$store.selectedRecordID){r in HStack{VStack(alignment:.leading){Text(r.displayDate.isEmpty ? (r.date ?? "未注明日期") : r.displayDate);Text(r.diagnosis.isEmpty ? "未填写诊断" : r.diagnosis).font(.caption)};Spacer();Image(systemName:"chevron.right").font(.caption).foregroundStyle(.secondary)}.tag(r.id).contextMenu { Button("删除病历", role:.destructive){store.selectedRecordID=r.id;confirmDelete=true} }}
                 Text(store.status).font(.caption).foregroundStyle(.secondary)
             }.padding().navigationSplitViewColumnWidth(min:300,ideal:360)
-        } detail: { if let r=selectedRecord { EditorView(record:r,store:store).id(r.id) } else { VStack{Image(systemName:"doc.text").font(.system(size:42));Text("请选择历史病历")}.foregroundStyle(.secondary) } }.frame(minWidth:1200,minHeight:760)
+        } detail: { if let r=selectedRecord { EditorView(record:r,store:store).id(r.id) } else { VStack{Image(systemName:"doc.text").font(.largeTitle);Text("请选择历史病历")}.foregroundStyle(.secondary) } }.frame(minWidth:1200,minHeight:760)
         .onChange(of: store.selectedPatientID) { _ in store.selectedRecordID = store.patientRecords.first?.id }
         .toolbar { ToolbarItem(placement: .primaryAction) { Button { showingMedicineManager = true } label: { Label("药品价格", systemImage: "dollarsign.circle") } }; ToolbarItem(placement: .primaryAction) { Button { showingNewVisit = true } label: { Label("新建病历", systemImage: "plus") } }; ToolbarItem(placement: .primaryAction) { Button { confirmDelete = true } label: { Label("删除病历", systemImage: "trash") }.disabled(store.selectedRecordID == nil) } }
         .sheet(isPresented: $showingNewVisit) { NewVisitView(store: store) }
