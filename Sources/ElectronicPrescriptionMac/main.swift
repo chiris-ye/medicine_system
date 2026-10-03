@@ -198,6 +198,7 @@ struct MedicineManagerView: View {
 
 struct ContentView: View {
     @StateObject private var store=ClinicStore(); @State private var showingNewVisit=false; @State private var showingMedicineManager=false; @State private var showingFontSettings=false; @State private var confirmDelete=false
+    @AppStorage("appFontLevel") private var storedFontLevel = AppFontLevel.small.rawValue
     var selectedRecord: VisitRecord? { store.selectedRecord }
     var body: some View {
         NavigationSplitView {
@@ -207,6 +208,7 @@ struct ContentView: View {
                 Divider(); Text("历史病历").appFont(13, weight: .semibold).padding(.horizontal,4)
                 List(store.patientRecords,selection:$store.selectedRecordID){r in HStack{VStack(alignment:.leading){Text(r.displayDate.isEmpty ? (r.date ?? "未注明日期") : r.displayDate);Text(r.diagnosis.isEmpty ? "未填写诊断" : r.diagnosis).appFont(11)};Spacer();Image(systemName:"chevron.right").appFont(11).foregroundStyle(.secondary)}.tag(r.id).contextMenu { Button("删除病历", role:.destructive){store.selectedRecordID=r.id;confirmDelete=true} }}
                 Text(store.status).appFont(11).foregroundStyle(.secondary)
+                Button { showingFontSettings = true } label: { HStack { Label("字体大小", systemImage: "textformat.size"); Spacer(); Text((AppFontLevel(rawValue: storedFontLevel) ?? .small).title).foregroundStyle(.secondary) } }.buttonStyle(.bordered)
             }.padding().navigationSplitViewColumnWidth(min:300,ideal:360)
         } detail: { if let r=selectedRecord { EditorView(record:r,store:store).id(r.id) } else { VStack{Image(systemName:"doc.text").appFont(26);Text("请选择历史病历")}.foregroundStyle(.secondary) } }.frame(minWidth:1200,minHeight:760)
         .onChange(of: store.selectedPatientID) { _ in store.selectedRecordID = store.patientRecords.first?.id }
@@ -366,4 +368,9 @@ private struct AppFontRootModifier: ViewModifier {
     }
 }
 
-@main struct ElectronicPrescriptionMacApp: App { var body: some Scene { WindowGroup { ContentView().modifier(AppFontRootModifier()) } } }
+@main struct ElectronicPrescriptionMacApp: App {
+    var body: some Scene {
+        WindowGroup { ContentView().modifier(AppFontRootModifier()) }
+        Settings { FontSettingsView().modifier(AppFontRootModifier()) }
+    }
+}
