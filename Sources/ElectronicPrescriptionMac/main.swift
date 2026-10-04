@@ -15,6 +15,7 @@ private enum AppFontLevel: String, CaseIterable, Identifiable {
     var title: String { switch self { case .small: "小"; case .medium: "中"; case .large: "大"; case .extraLarge: "极大" } }
     var scale: CGFloat { switch self { case .small: 1.0; case .medium: 1.22; case .large: 1.48; case .extraLarge: 1.78 } }
 }
+private enum HistoryDateFilter: String, CaseIterable, Identifiable { case all, today, yesterday; var id: String { rawValue }; var title: String { switch self { case .all: "全部"; case .today: "今天"; case .yesterday: "昨天" } } }
 private struct AppFontScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
 private extension EnvironmentValues { var appFontScale: CGFloat { get { self[AppFontScaleKey.self] } set { self[AppFontScaleKey.self] = newValue } } }
 private struct AppFontModifier: ViewModifier {
@@ -36,6 +37,7 @@ private extension View { func appFont(_ size: CGFloat, weight: Font.Weight = .re
     var filteredPatients: [Patient] { search.isEmpty ? patientIndex : patientIndex.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.phone.contains(search) } }
     var selectedPatient: Patient? { patients.first { $0.id == selectedPatientID } }
     var patientRecords: [VisitRecord] { recordIndex[selectedPatient?.name ?? ""] ?? [] }
+    func patientRecordsForName(_ name: String) -> [VisitRecord] { recordIndex[name] ?? [] }
     var selectedRecord: VisitRecord? { records.first { $0.id == selectedRecordID } }
     func openSQLite() {
         do {
@@ -198,14 +200,29 @@ struct MedicineManagerView: View {
 }
 
 struct ContentView: View {
-    @StateObject private var store=ClinicStore(); @State private var showingNewVisit=false; @State private var showingMedicineManager=false; @State private var showingFontSettings=false; @State private var confirmDelete=false
+    @StateObject private var store=ClinicStore(); @State private var showingNewVisit=false; @State private var showingMedicineManager=false; @State private var showingFontSettings=false; @State private var confirmDelete=false; @State private var historyDateFilter: HistoryDateFilter = .all
     @AppStorage("appFontLevel") private var storedFontLevel = AppFontLevel.small.rawValue
     var selectedRecord: VisitRecord? { store.selectedRecord }
+    private var visiblePatients: [Patient] {
+        let searched = store.filteredPatients
+        guard historyDateFilter != .all else { return searched }
+        let calendar = Calendar.current
+        let target = calendar.date(byAdding: .day, value: historyDateFilter == .today ? 0 : -1, to: Date())!
+        return searched.filter { patient in
+            guard let latest = store.patientRecordsForName(patient.name).first, let date = visitDate(latest) else { return false }
+            return calendar.isDate(date, inSameDayAs: target)
+        }
+    }
+    private func visitDate(_ record: VisitRecord) -> Date? {
+        if let date = record.date, let parsed = ISO8601DateFormatter().date(from: date) { return parsed }
+        let f = DateFormatter(); f.dateFormat = "yyyy年MM月dd日"; return f.date(from: record.displayDate)
+    }
     var body: some View {
         NavigationSplitView {
             VStack(alignment:.leading,spacing:8) {
                 Text("患者历史").appFont(20, weight: .bold); TextField("姓名 / 电话",text:$store.search).textFieldStyle(.roundedBorder)
-                List(store.filteredPatients,selection:$store.selectedPatientID){p in VStack(alignment:.leading){Text(p.name).appFont(13, weight: .semibold);Text("\(p.gender)  \(p.phone)").appFont(11).foregroundStyle(.secondary)}.tag(p.id)}
+                HStack(spacing: 6) { ForEach(HistoryDateFilter.allCases) { item in Button(item.title) { historyDateFilter = item }.buttonStyle(.bordered).tint(historyDateFilter == item ? .accentColor : .secondary) } }
+                List(visiblePatients,selection:$store.selectedPatientID){p in VStack(alignment:.leading){Text(p.name).appFont(13, weight: .semibold);Text("\(p.gender)  \(p.phone)").appFont(11).foregroundStyle(.secondary)}.tag(p.id)}
                 Divider(); Text("历史病历").appFont(13, weight: .semibold).padding(.horizontal,4)
                 List(store.patientRecords,selection:$store.selectedRecordID){r in HStack{VStack(alignment:.leading){Text(r.displayDate.isEmpty ? (r.date ?? "未注明日期") : r.displayDate);Text(r.diagnosis.isEmpty ? "未填写诊断" : r.diagnosis).appFont(11)};Spacer();Image(systemName:"chevron.right").appFont(11).foregroundStyle(.secondary)}.tag(r.id).contextMenu { Button("删除病历", role:.destructive){store.selectedRecordID=r.id;confirmDelete=true} }}
                 Text(store.status).appFont(11).foregroundStyle(.secondary)
